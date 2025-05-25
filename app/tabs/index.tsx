@@ -1,77 +1,171 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-
-const recentEntries = [
-  { id: 1, type: 'expense', category: 'Food', amount: 12.5, note: 'Lunch', date: '2024-06-01' },
-  { id: 2, type: 'income', category: 'Salary', amount: 500, note: '', date: '2024-06-01' },
-];
+import { reportService } from '../services/reports';
+import { budgetService } from '../services/budgets';
+import { auth } from '../config/firebase';
+import { Report, Budget, Transaction } from '../types'; // Added Transaction import
+import { router, useLocalSearchParams } from 'expo-router';
 
 const HomeScreen = () => {
-  const [showAnalytics, setShowAnalytics] = useState(false);
+  const { refresh } = useLocalSearchParams();
+  const [report, setReport] = useState<Report | null>(null);
+  const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth.currentUser) {
+      // Wrap navigation in setTimeout
+      setTimeout(() => {
+        router.replace('/(auth)/login');
+      }, 0);
+      return;
+    }
+    loadDashboardData();
+  }, [refresh]); // Add refresh to dependencies
+
+  const loadDashboardData = async () => {
+    if (!auth.currentUser) return;
+    
+    setLoading(true);
+    try {
+      const now = new Date();
+      const [monthlyReport, budget] = await Promise.all([
+        reportService.generateMonthlyReport(auth.currentUser.uid, now.getMonth() + 1, now.getFullYear()),
+        budgetService.getCurrentBudget(auth.currentUser.uid)
+      ]);
+
+      setReport(monthlyReport);
+      setCurrentBudget(budget);
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `$${amount.toFixed(2)}`;
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1E88E5" />
+      </View>
+    );
+  }
+
+  const renderTransaction = (entry: Transaction) => {
+    const isExpense = entry.type === 'expense';
+    const icon = isExpense ? 'arrow-downward' : 'arrow-upward';
+    const color = isExpense ? '#E53935' : '#43A047';
+    
+    return (
+      <View style={styles.transactionRow}>
+        <View style={[styles.iconContainer, { backgroundColor: color + '10' }]}>
+          <MaterialIcons 
+            name={icon}
+            size={24} 
+            color={color}
+          />
+        </View>
+        
+        <View style={styles.transactionInfo}>
+          <View>
+            <Text style={styles.transactionCategory}>{entry.category}</Text>
+            <Text style={styles.transactionDate}>
+              {new Date(entry.date).toLocaleDateString()}
+            </Text>
+          </View>
+          <Text style={[
+            styles.transactionAmount,
+            isExpense ? styles.expenseText : styles.incomeText
+          ]}>
+            {isExpense ? '-' : '+'}{formatCurrency(entry.amount)}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  const handleViewAllTransactions = () => {
+    router.push('/tabs/Logs');
+  };
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Dashboard</Text>
-      <View style={styles.budgetCard}>
-        <Text style={styles.budgetLabel}>Overall Budget Left</Text>
-        <Text style={styles.budgetAmount}>$0.00</Text>
-        <View style={styles.row}>
-          <View style={styles.incomeExpenseCard}>
-            <MaterialIcons name="arrow-downward" size={24} color="#43A047" />
-            <Text style={styles.incomeLabel}>Income</Text>
-            <Text style={styles.incomeAmount}>$0.00</Text>
-          </View>
-          <View style={styles.incomeExpenseCard}>
-            <MaterialIcons name="arrow-upward" size={24} color="#E53935" />
-            <Text style={styles.expenseLabel}>Expense</Text>
-            <Text style={styles.expenseAmount}>$0.00</Text>
-          </View>
+      
+      {/* Summary Cards */}
+      <View style={styles.summaryCards}>
+        <View style={[styles.card, styles.incomeCard]}>
+          <MaterialIcons name="arrow-circle-up" size={24} color="#43A047" />
+          <Text style={styles.cardLabel}>Income</Text>
+          <Text style={[styles.cardAmount, styles.incomeText]}>
+            {formatCurrency(report?.totalIncome || 0)}
+          </Text>
         </View>
-        <TouchableOpacity style={styles.analyticsBtn} onPress={() => setShowAnalytics(true)}>
-          <MaterialIcons name="pie-chart" size={20} color="#fff" />
-          <Text style={styles.analyticsText}>View Analytics</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.section}>Recent Entries</Text>
-      <View style={styles.card}>
-        {recentEntries.length === 0 ? (
-          <Text style={styles.noEntry}>No recent transactions.</Text>
-        ) : (
-          recentEntries.map(entry => (
-            <View key={entry.id} style={styles.entryRow}>
-              <MaterialIcons
-                name={entry.type === 'income' ? 'arrow-downward' : 'arrow-upward'}
-                size={20}
-                color={entry.type === 'income' ? '#43A047' : '#E53935'}
-              />
-              <Text style={styles.entryCategory}>{entry.category}</Text>
-              <Text style={entry.type === 'income' ? styles.entryIncome : styles.entryExpense}>
-                {entry.type === 'income' ? '+' : '-'}${entry.amount.toFixed(2)}
-              </Text>
-              <Text style={styles.entryNote}>{entry.note}</Text>
-              <Text style={styles.entryDate}>{entry.date}</Text>
-            </View>
-          ))
-        )}
+
+        <View style={[styles.card, styles.expenseCard]}>
+          <MaterialIcons name="arrow-circle-down" size={24} color="#E53935" />
+          <Text style={styles.cardLabel}>Expenses</Text>
+          <Text style={[styles.cardAmount, styles.expenseText]}>
+            {formatCurrency(report?.totalExpense || 0)}
+          </Text>
+        </View>
+
+        <View style={[styles.card, styles.balanceCard]}>
+          <MaterialIcons name="account-balance-wallet" size={24} color="#1E88E5" />
+          <Text style={styles.cardLabel}>Balance</Text>
+          <Text style={[styles.cardAmount, styles.balanceText]}>
+            {formatCurrency(report?.balance || 0)}
+          </Text>
+        </View>
       </View>
 
-      {/* Analytics Modal */}
-      <Modal visible={showAnalytics} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Analytics</Text>
-            {/* Placeholder for chart */}
-            <MaterialIcons name="pie-chart" size={64} color="#1E88E5" style={{ alignSelf: 'center', marginBottom: 16 }} />
-            <Text style={{ textAlign: 'center', color: '#212121', marginBottom: 16 }}>
-              Charts and insights will appear here.
-            </Text>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setShowAnalytics(false)}>
-              <Text style={styles.closeBtnText}>Close</Text>
-            </TouchableOpacity>
+      {/* Budget Status */}
+      {currentBudget && (
+        <View style={styles.budgetSection}>
+          <Text style={styles.sectionTitle}>Monthly Budget</Text>
+          <View style={styles.budgetCard}>
+            <View style={styles.budgetHeader}>
+              <Text style={styles.budgetLabel}>Budget Progress</Text>
+              <Text style={styles.budgetAmount}>
+                {formatCurrency(currentBudget.spent)} / {formatCurrency(currentBudget.amount)}
+              </Text>
+            </View>
+            <View style={styles.progressBar}>
+              <View 
+                style={[
+                  styles.progressFill,
+                  { 
+                    width: `${Math.min((currentBudget.spent / currentBudget.amount) * 100, 100)}%`,
+                    backgroundColor: currentBudget.spent > currentBudget.amount ? '#E53935' : '#43A047'
+                  }
+                ]} 
+              />
+            </View>
           </View>
         </View>
-      </Modal>
+      )}
+
+      {/* Recent Transactions */}
+      <View style={styles.recentSection}>
+        <Text style={styles.sectionTitle}>Recent Activity</Text>
+        {report?.recentTransactions?.slice(0, 5).map((entry, index) => (
+          <View key={index}>
+            {renderTransaction(entry)}
+          </View>
+        ))}
+        <TouchableOpacity 
+          style={styles.viewMoreButton}
+          onPress={handleViewAllTransactions}
+        >
+          <Text style={styles.viewMoreText}>View All Transactions</Text>
+          <MaterialIcons name="chevron-right" size={24} color="#1E88E5" />
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 };
@@ -81,175 +175,156 @@ export default HomeScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F6F8',
-    padding: 24,
+    backgroundColor: '#F5F5F5',
+    padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#1E88E5',
     marginBottom: 24,
-    textAlign: 'center',
+    color: '#212121',
+  },
+  summaryCards: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  card: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    marginHorizontal: 4,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  cardLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
+  },
+  cardAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  incomeText: {
+    color: '#43A047',
+  },
+  expenseText: {
+    color: '#E53935',
+  },
+  balanceText: {
+    color: '#1E88E5',
+  },
+  incomeCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#43A047'
+  },
+  expenseCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#E53935'
+  },
+  balanceCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#1E88E5'
+  },
+  budgetSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#212121',
   },
   budgetCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 32,
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#1E88E5',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  budgetLabel: {
-    fontSize: 18,
-    color: '#212121',
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  budgetAmount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#1E88E5',
-    marginBottom: 16,
-  },
-  row: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  incomeExpenseCard: {
-    flex: 1,
-    backgroundColor: '#F4F6F8',
     borderRadius: 12,
     padding: 16,
-    marginHorizontal: 6,
-    alignItems: 'center',
-    elevation: 1,
+    elevation: 2,
   },
-  incomeLabel: {
-    color: '#43A047',
-    fontWeight: '600',
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  incomeAmount: {
-    color: '#43A047',
-    fontWeight: 'bold',
-    fontSize: 20,
-  },
-  expenseLabel: {
-    color: '#E53935',
-    fontWeight: '600',
-    fontSize: 16,
-    marginBottom: 4,
-  },
-  expenseAmount: {
-    color: '#E53935',
-    fontWeight: 'bold',
-    fontSize: 20,
-  },
-  analyticsBtn: {
+  budgetHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E88E5',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 16,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  analyticsText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 8,
+  budgetLabel: {
     fontSize: 16,
+    color: '#666'
   },
-  section: {
+  budgetAmount: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 8,
-    color: '#212121',
+    color: '#212121'
   },
-  card: {
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  recentSection: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
+    marginTop: 24,
     elevation: 2,
-    alignItems: 'center',
   },
-  noEntry: {
-    color: '#888',
-    fontSize: 16,
-  },
-  entryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    width: '100%',
-    justifyContent: 'space-between',
-  },
-  entryCategory: {
-    flex: 1,
-    marginLeft: 8,
-    fontWeight: 'bold',
-    color: '#212121',
-  },
-  entryIncome: {
-    color: '#43A047',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  entryExpense: {
-    color: '#E53935',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  entryNote: {
-    flex: 1,
-    color: '#888',
-    marginLeft: 8,
-    fontStyle: 'italic',
-  },
-  entryDate: {
-    color: '#888',
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 24,
-    width: 320,
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  transactionInfo: {
+    flex: 1,
+    marginLeft: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1E88E5',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  closeBtn: {
-    backgroundColor: '#1E88E5',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 32,
-    marginTop: 8,
-  },
-  closeBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
+  transactionCategory: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: '#212121',
+  },
+  transactionDate: {
+    fontSize: 14,
+    color: '#757575',
+    marginTop: 4,
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  viewMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    padding: 8,
+  },
+  viewMoreText: {
+    color: '#1E88E5',
+    fontSize: 16,
+    marginRight: 4,
   },
 });

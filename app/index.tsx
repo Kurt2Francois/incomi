@@ -1,10 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 
 const WelcomeScreen = () => {
-  const router = useRouter();
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>INCOMI</Text>
@@ -12,12 +10,11 @@ const WelcomeScreen = () => {
       <Text style={styles.description}>
         Track your income and expenses with daily logs, smart budgets, and visual insights.
       </Text>
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => router.push('/login')}
-      >
-        <Text style={styles.buttonText}>Get Started</Text>
-      </TouchableOpacity>
+      <Link href="/(auth)/login" asChild>
+        <TouchableOpacity style={styles.button}>
+          <Text style={styles.buttonText}>Get Started</Text>
+        </TouchableOpacity>
+      </Link>
     </View>
   );
 };

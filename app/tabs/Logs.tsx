@@ -1,38 +1,114 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { expenseService } from '../services/expenses';
+import { incomeService } from '../services/income';
+import { auth } from '../config/firebase';
+import { Expense, Income } from '../types';
 
-const logs = [
-  { id: 1, type: 'expense', category: 'Food', amount: 12.5, note: 'Lunch', date: '2024-06-01' },
-  { id: 2, type: 'income', category: 'Salary', amount: 500, note: '', date: '2024-06-01' },
-];
+type Transaction = (Expense | Income) & { type: 'expense' | 'income' };
 
-const LogsScreen = () => (
-  <View style={styles.container}>
-    <Text style={styles.title}>Daily Logs</Text>
-    <Text style={styles.text}>Your daily income and expense entries will appear here.</Text>
-    <FlatList
-      data={logs}
-      keyExtractor={item => item.id.toString()}
-      renderItem={({ item }) => (
-        <View style={styles.logRow}>
-          <MaterialIcons
-            name={item.type === 'income' ? 'arrow-downward' : 'arrow-upward'}
-            size={20}
-            color={item.type === 'income' ? '#43A047' : '#E53935'}
-          />
-          <Text style={styles.logCategory}>{item.category}</Text>
-          <Text style={item.type === 'income' ? styles.logIncome : styles.logExpense}>
-            {item.type === 'income' ? '+' : '-'}${item.amount.toFixed(2)}
-          </Text>
-          <Text style={styles.logNote}>{item.note}</Text>
-          <Text style={styles.logDate}>{item.date}</Text>
-        </View>
+const LogsScreen = () => {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState(new Date().getMonth());
+  const [year, setYear] = useState(new Date().getFullYear());
+
+  useEffect(() => {
+    loadTransactions();
+  }, [month, year]);
+
+  const loadTransactions = async () => {
+    if (!auth.currentUser) return;
+
+    setLoading(true);
+    try {
+      const [expenses, incomes] = await Promise.all([
+        expenseService.getByUserId(auth.currentUser.uid, month, year),
+        incomeService.getByUserId(auth.currentUser.uid, month, year)
+      ]);
+
+      const allTransactions: Transaction[] = [
+        ...expenses.map(e => ({ ...e, type: 'expense' as const })),
+        ...incomes.map(i => ({ ...i, type: 'income' as const }))
+      ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+      setTransactions(allTransactions);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderTransaction = ({ item }: { item: Transaction }) => (
+    <View style={styles.logRow}>
+      <MaterialIcons 
+        name={item.type === 'expense' ? 'arrow-circle-down' : 'arrow-circle-up'} 
+        size={24} 
+        color={item.type === 'expense' ? '#E53935' : '#43A047'} 
+      />
+      <Text style={styles.logCategory}>{item.category}</Text>
+      <Text style={item.type === 'expense' ? styles.logExpense : styles.logIncome}>
+        {item.type === 'expense' ? '-' : '+'}${item.amount.toFixed(2)}
+      </Text>
+      {item.note && <Text style={styles.logNote}>{item.note}</Text>}
+      <Text style={styles.logDate}>
+        {new Date(item.date).toLocaleDateString()}
+      </Text>
+    </View>
+  );
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      if (month === 0) {
+        setMonth(11);
+        setYear(year - 1);
+      } else {
+        setMonth(month - 1);
+      }
+    } else {
+      if (month === 11) {
+        setMonth(0);
+        setYear(year + 1);
+      } else {
+        setMonth(month + 1);
+      }
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigateMonth('prev')}>
+          <MaterialIcons name="chevron-left" size={32} color="#1E88E5" />
+        </TouchableOpacity>
+        <Text style={styles.title}>
+          {new Date(year, month).toLocaleDateString('default', { 
+            month: 'long', 
+            year: 'numeric' 
+          })}
+        </Text>
+        <TouchableOpacity onPress={() => navigateMonth('next')}>
+          <MaterialIcons name="chevron-right" size={32} color="#1E88E5" />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#1E88E5" style={styles.loader} />
+      ) : transactions.length > 0 ? (
+        <FlatList
+          data={transactions}
+          renderItem={renderTransaction}
+          keyExtractor={item => `${item.type}-${item.id}`}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <Text style={styles.noEntry}>No transactions for this month</Text>
       )}
-      ListEmptyComponent={<Text style={styles.noEntry}>No logs yet.</Text>}
-    />
-  </View>
-);
+    </View>
+  );
+};
 
 export default LogsScreen;
 
@@ -97,4 +173,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });

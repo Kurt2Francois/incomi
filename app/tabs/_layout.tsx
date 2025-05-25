@@ -7,48 +7,51 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#1E88E5',
-        tabBarInactiveTintColor: '#888',
-        tabBarStyle: { backgroundColor: '#fff' },
-        tabBarShowLabel: false, // Hide labels
+        tabBarInactiveTintColor: '#757575',
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="dashboard" color={color} size={size} />
+          title: 'Home',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="home" size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="Logs"
+        name="logs"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="list-alt" color={color} size={size} />
+          title: 'Logs',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="receipt" size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="Add"
+        name="add"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="add-circle-outline" color={color} size={size} />
+          title: 'Add',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="add-circle" size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="Budgets"
+        name="budgets"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="pie-chart" color={color} size={size} />
+          title: 'Budgets',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="account-balance-wallet" size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="Profile"
+        name="profile"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="person" color={color} size={size} />
+          title: 'Profile',
+          tabBarIcon: ({ color }) => (
+            <MaterialIcons name="person" size={24} color={color} />
           ),
         }}
       />
