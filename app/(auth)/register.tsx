@@ -21,7 +21,7 @@ const RegisterScreen = () => {
     setLoading(true);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      navigate.replace.tabs();
+navigate.push.login();
     } catch (error: any) {
       console.error('Registration error:', error);
       Alert.alert('Error', 'Failed to register. Please try again.');

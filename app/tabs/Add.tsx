@@ -8,6 +8,7 @@ import { auth } from '../config/firebase';
 import { Category } from '../types';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '../constants/categories';
 import { router } from 'expo-router';
+import { EventRegister } from 'react-native-event-listeners';
 
 const AddScreen = () => {
   const [type, setType] = useState<'income' | 'expense'>('expense');
@@ -82,6 +83,9 @@ const AddScreen = () => {
       setAmount('');
       setCategory(null);
       setNote('');
+      
+      // Emit refresh event before navigation
+      EventRegister.emit('transactionAdded');
       
       // Navigate back to home
       router.push('/tabs');

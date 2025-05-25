@@ -4,25 +4,39 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { reportService } from '../services/reports';
 import { budgetService } from '../services/budgets';
 import { auth } from '../config/firebase';
-import { Report, Budget, Transaction } from '../types'; // Added Transaction import
-import { router, useLocalSearchParams } from 'expo-router';
+import { Report, Budget, Transaction } from '../types';
+import { router } from 'expo-router';
+import { EventRegister } from 'react-native-event-listeners';
 
 const HomeScreen = () => {
-  const { refresh } = useLocalSearchParams();
   const [report, setReport] = useState<Report | null>(null);
   const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!auth.currentUser) {
-      // Wrap navigation in setTimeout
       setTimeout(() => {
         router.replace('/(auth)/login');
       }, 0);
       return;
     }
+    
     loadDashboardData();
-  }, [refresh]); // Add refresh to dependencies
+
+    // Add event listener for transaction updates with type assertion
+    const listener = EventRegister.addEventListener(
+      'transactionAdded',
+      () => {
+        loadDashboardData();
+      }
+    ) as string;  // Add type assertion here
+
+    return () => {
+      if (typeof listener === 'string') {
+        EventRegister.removeEventListener(listener);
+      }
+    };
+  }, []);
 
   const loadDashboardData = async () => {
     if (!auth.currentUser) return;
